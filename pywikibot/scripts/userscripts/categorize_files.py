@@ -241,7 +241,7 @@ def categorize_files():
         pywikibot.output("Page " + str(i) + ":")
 
         if not page.is_filepage():
-            pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file. Skipping page...")
+            pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file page. Skipping page...")
             pywikibot.output("")
             continue
 
