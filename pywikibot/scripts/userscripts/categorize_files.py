@@ -167,10 +167,11 @@ def flatten_category_mimes():
 
     for category, mimes in category_mimes.items():
         c = category
-        if category.startswith("Microsoft ") and category.endswith(" documents"):
-            c = ["Office documents", "Microsoft Office documents", category]
-        elif category.startswith("OpenDocument ") and category.endswith(" documents"):
-            c = ["Office documents", "OpenDocument documents", category]
+        if category.endswith(" documents"):
+            if category.startswith("Microsoft "):
+                c = ["Office documents", "Microsoft Office documents", category]
+            elif category.startswith("OpenDocument "):
+                c = ["Office documents", "OpenDocument documents", category]
 
         if isinstance(mimes, str):
             mime_categories[mimes.lower()] = c
