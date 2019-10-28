@@ -233,17 +233,21 @@ def build_categories(mime_category):
 def categorize_files():
     site = pywikibot.Site()
     generator = pagegenerators.PreloadingGenerator(pagegenerators.UnCategorizedImageGenerator(site=site))
-    i = 0
+    f = 0
+    p = 0
+    w = 0
+    e = 0
     for page in generator:
-        i += 1
+        p += 1
 
         pywikibot.output("")
 
-        pywikibot.output("Page " + str(i) + ":")
+        pywikibot.output("Page " + str(p) + ":")
 
         if not page.is_filepage():
             pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file page. Skipping page...")
             pywikibot.output("")
+            e += 1
             continue
 
         file_page = pywikibot.FilePage(page)
@@ -260,18 +264,21 @@ def categorize_files():
             mime_category = mime_categories[mime]
         else:
             warn("Unrecognized MIME type \"" + mime + "\". Attempting to search by regex...")
+            w += 1
 
             for pattern_category_regex in pattern_category_regexes:
                 regex = pattern_category_regex["regex"]
                 if regex.search(mime) is not None:
                     category = pattern_category_regex["category"]
                     warn("Found category \"" + category + "\" for unrecognized MIME type \"" + mime + "\".")
+                    w += 1
                     mime_category = category
                     break
 
         if mime_category is None:
             pywikibot.error("No category found for MIME type \"" + mime + "\". Skipping file...")
             pywikibot.output("")
+            e += 1
             continue
 
         # Build categories, and add them to the file page.
@@ -287,6 +294,22 @@ def categorize_files():
             asynchronous=True,
             summary=summary
         )
+
+        f += 1
+
+    # Output report.
+    pywikibot.output("")
+    pywikibot.output("Categorized {0} {1} out of {2} {3} ({4:.2%}) with {5} {6} and {7} {8}.".format(
+        f,
+        "file page" + ("s" if f != 1 else ""),
+        p,
+        "page" + ("s" if p != 1 else ""),
+        (f / (p if p != 0 else 1)),
+        w,
+        "warning" + ("s" if w != 1 else ""),
+        e,
+        "error" + ("s" if e != 1 else "")
+    ))
 
 
 def main(*args):
