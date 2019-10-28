@@ -304,7 +304,7 @@ def categorize_files():
         "file page" + ("s" if f != 1 else ""),
         p,
         "page" + ("s" if p != 1 else ""),
-        (f / (p if p != 0 else 1)),
+        ((f / p) if p != 0 else 1),
         w,
         "warning" + ("s" if w != 1 else ""),
         e,
