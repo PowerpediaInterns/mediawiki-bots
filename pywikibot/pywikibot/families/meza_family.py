@@ -17,8 +17,12 @@ limitations under the License.
 
 from pywikibot import family
 
-"""Meza family."""
+
 class Family(family.Family):
+    """
+    Meza family.
+    """
+
     name = "meza"
     langs = {
         "en": None
