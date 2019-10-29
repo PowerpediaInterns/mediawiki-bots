@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # This is an automatically generated file used to store
 # BotPasswords.
 #
