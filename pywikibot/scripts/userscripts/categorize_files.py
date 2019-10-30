@@ -47,19 +47,74 @@ category_mimes = {
             r"audio/.*"
         ],
         "literals": [
-            "audio/aac",
-            "audio/wave",
+            "audio/x-flac",
+            "application/flac",
+            "audio/flac",
+            "application/x-flac",
             "audio/wav",
+            "application/x-wave",
+            "audio/wave",
+            "application/wave",
+            "application/wav",
+            "application/x-wav",
+            "audio/x-wave",
             "audio/x-wav",
             "audio/x-pn-wav",
-            "audio/webm",
+            "audio/mp3",
+            "application/mp3",
+            "application/x-mp3",
+            "audio/mpg",
+            "audio/mpeg3",
+            "audio/x-mp3",
+            "audio/x-mpegaudio",
+            "audio/mpeg",
+            "audio/x-mpeg3",
+            "audio/x-mpg",
+            "audio/x-mpeg",
+            "audio/mp1",
+            "application/mp1",
+            "application/aiff",
+            "audio/aiff",
+            "application/x-aif",
+            "application/aif",
+            "application/x-aiff",
+            "audio/x-aifc",
+            "audio/x-aiff",
+            "audio/aif",
+            "audio/aifc",
+            "audio/x-aif",
+            "audio/m4a",
+            "audio/mp4",
+            "application/x-m4a",
+            "application/x-m4p",
+            "audio/mpeg4",
+            "audio/x-m4b",
+            "audio/x-m4a",
+            "audio/x-m4p",
+            "audio/x-mp4",
+            "audio/x-ms-wma",
+            "application/x-ms-wma",
+            "application/wma",
+            "audio/wma",
+            "audio/x-scpls",
+            "audio/x-mpegurl",
+            "audio/x-ms-asf",
+            "audio/x-ms-wax",
+            "audio/x-ms-wvx",
+            "audio/aacp",
+            "audio/aac",
+            "audio/3gpp",
+            "audio/3gpp2",
+            "audio/x-aac",
+            "audio/x-ogg",
+            "audio/vorbis",
             "audio/ogg",
             "audio/opus",
+            "audio/webm",
             "audio/midi",
             "audio/x-midi",
-            "audio/mpeg",
-            "audio/3gpp",
-            "audio/3gpp2"
+            "audio/x-matroska",
+            "audio/speex"
         ]
     },
     "Videos": {
@@ -67,19 +122,44 @@ category_mimes = {
             r"video/.*"
         ],
         "literals": [
-            "video/x-msvideo",
-            "video/webm",
-            "video/ogg",
+            "video/3gpp",
+            "video/3gpp2",
+            "video/avi",
+            "video/mkv",
+            "video/mp4",
+            "video/mp4v-es",
             "video/mpeg",
             "video/mp2t",
-            "video/3gpp",
-            "video/3gpp2"
+            "video/quicktime",
+            "video/x-quicktime",
+            "video/webm",
+            "video/ogg",
+            "video/theora",
+            "video/x-m4v",
+            "video/x-matroska",
+            "video/x-matroska-3d",
+            "video/x-mkv",
+            "video/x-ms-asf",
+            "video/x-ms-avi",
+            "video/x-ms-video",
+            "video/x-ms-wax",
+            "video/x-ms-wmv",
+            "video/x-ms-wvx",
+            "video/x-msvideo"
         ]
     },
     "Audios or videos": [
-        "application/ogg"
+        "application/ogg",
+        "application/x-ogg",
+        "application/mpeg",
+        "application/mpeg3",
+        "application/mpeg4",
+        "application/mp4"
+        "application/x-m4b",
+        "application/x-mp4"
     ],
     "PDFs": "application/pdf",
+    "Text files": "text/plain",
 
     "Microsoft Word documents": {
         "patterns": [
@@ -158,7 +238,7 @@ category_mimes = {
 
 def flatten_category_mimes():
     """
-    Flatten the `category_mimes` dictionary to allow hashtable lookup by MIME type.
+    Flatten the `category_mimes` dictionary to allow hashtable lookups by MIME type.
     :return:
     """
 
@@ -220,7 +300,9 @@ def remove_categories():
 
 
 def build_categories(mime_category):
-    categories = ["Files"]
+    categories = [
+        # "Files"
+    ]
 
     if isinstance(mime_category, list):
         categories += mime_category
