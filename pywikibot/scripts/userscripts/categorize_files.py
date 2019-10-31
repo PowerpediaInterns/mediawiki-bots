@@ -241,17 +241,18 @@ def flatten_category_mimes():
     Flatten the `category_mimes` dictionary to allow hashtable lookups by MIME type.
     :return:
     """
-
     mime_categories = {}
     pattern_category_regexes = []
 
     for category, mimes in category_mimes.items():
         c = category
         if category.endswith(" documents"):
+            c = ["Office documents"]
             if category.startswith("Microsoft "):
-                c = ["Office documents", "Microsoft Office documents", category]
+                c.append("Microsoft Office documents")
             elif category.startswith("OpenDocument "):
-                c = ["Office documents", "OpenDocument documents", category]
+                c.append("OpenDocument documents")
+            c.append(category)
 
         if isinstance(mimes, str):
             mime_categories[mimes.lower()] = c
