@@ -405,7 +405,7 @@ class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
             'example': False,
         })
 
-        super(CategorizerBot, self).__init__(site=site, generator=generator, **kwargs)
+        super().__init__(site=site, generator=generator, **kwargs)
 
         self.status = {
             "f": 0,
@@ -432,12 +432,12 @@ class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
         pywikibot.output(report)
 
     def run(self):
-        super(CategorizerBot, self).run()
+        super().run()
         pywikibot.output("")
 
     def exit(self):
         self.output_report()
-        super(CategorizerBot, self).exit()
+        super().exit()
 
     def treat_page(self):
         site = self.site
