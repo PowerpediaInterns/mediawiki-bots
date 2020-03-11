@@ -16,9 +16,10 @@ limitations under the License.
 """
 
 import re
-from warnings import warn
+
 import pywikibot
 from pywikibot import pagegenerators, textlib
+from pywikibot.bot import SingleSiteBot, ExistingPageBot, NoRedirectPageBot
 from pywikibot.comms.http import requests
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -241,6 +242,7 @@ def flatten_category_mimes():
     Flatten the `category_mimes` dictionary to allow hashtable lookups by MIME type.
     :return:
     """
+
     mime_categories = {}
     pattern_category_regexes = []
 
@@ -285,21 +287,6 @@ def flatten_category_mimes():
 mime_categories, pattern_category_regexes = flatten_category_mimes()
 
 
-def remove_categories():
-    site = pywikibot.Site()
-    category = pywikibot.Category(site, "Category:Files")
-    generator = pagegenerators.PreloadingGenerator(pagegenerators.CategorizedPageGenerator(category=category))
-    for page in generator:
-        pywikibot.output(vars(page))
-        pywikibot.output(page.text)
-
-        page.put(
-            textlib.replaceCategoryLinks(page.get(), [], site=page.site),
-            asynchronous=True,
-            summary="Remove categories."
-        )
-
-
 def build_categories(mime_category):
     categories = [
         # "Files"
@@ -313,76 +300,85 @@ def build_categories(mime_category):
     return categories
 
 
-def categorize_files():
-    site = pywikibot.Site()
-    generator = pagegenerators.PreloadingGenerator(pagegenerators.UnCategorizedImageGenerator(site=site))
-    f = 0
-    p = 0
-    w = 0
-    e = 0
-    for page in generator:
-        p += 1
+def categorize_file_page(site, page, p=0):
+    status = {
+        "f": 0,
+        "p": 1,
+        "w": 0,
+        "e": 0
+    }
 
+    pywikibot.output(f"Page {p + 1}:")
+
+    if not page.is_filepage():
+        pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file page. Skipping page...")
         pywikibot.output("")
+        status["e"] += 1
+        return status
 
-        pywikibot.output("Page " + str(p) + ":")
+    file_page = pywikibot.FilePage(page)
+    file_info = file_page.latest_file_info
+    mime = file_info.mime.lower()
 
-        if not page.is_filepage():
-            pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file page. Skipping page...")
-            pywikibot.output("")
-            e += 1
-            continue
+    pywikibot.output("    Title: " + file_page.title(as_link=True))
+    pywikibot.output("    URI: " + file_page.full_url())
+    pywikibot.output("    MIME type: " + mime)
 
-        file_page = pywikibot.FilePage(page)
-        file_info = file_page.latest_file_info
-        mime = file_info.mime.lower()
+    # Find a matching category for the MIME type.
+    mime_category = None
+    if mime in mime_categories:
+        mime_category = mime_categories[mime]
+    else:
+        pywikibot.warning(f"Unrecognized MIME type \"{mime}\". Attempting to search by regex...")
+        status["w"] += 1
 
-        pywikibot.output("    Title: " + file_page.title(as_link=True))
-        pywikibot.output("    URI: " + file_page.full_url())
-        pywikibot.output("    MIME type: " + mime)
+        for pattern_category_regex in pattern_category_regexes:
+            regex = pattern_category_regex["regex"]
+            if regex.search(mime) is not None:
+                category = pattern_category_regex["category"]
+                pywikibot.warning(f"Found category \"{category}\" for unrecognized MIME type \"{mime}\".")
+                status["w"] += 1
+                mime_category = category
+                break
 
-        # Find a matching category for the MIME type.
-        mime_category = None
-        if mime in mime_categories:
-            mime_category = mime_categories[mime]
-        else:
-            warn("Unrecognized MIME type \"" + mime + "\". Attempting to search by regex...")
-            w += 1
+    if mime_category is None:
+        pywikibot.error(f"No category found for MIME type \"{mime}\". Skipping file page...")
+        pywikibot.output("")
+        status["e"] += 1
+        return status
 
-            for pattern_category_regex in pattern_category_regexes:
-                regex = pattern_category_regex["regex"]
-                if regex.search(mime) is not None:
-                    category = pattern_category_regex["category"]
-                    warn("Found category \"" + category + "\" for unrecognized MIME type \"" + mime + "\".")
-                    w += 1
-                    mime_category = category
-                    break
+    # Build categories, and add them to the file page.
+    categories = build_categories(mime_category)
+    pywikibot.output("    Add categories: " + ", ".join(categories))
 
-        if mime_category is None:
-            pywikibot.error("No category found for MIME type \"" + mime + "\". Skipping file...")
-            pywikibot.output("")
-            e += 1
-            continue
+    page_categories = []
+    category_wikilinks = []
+    for category in categories:
+        page_category = pywikibot.Page(site, "Category:" + category)
+        page_categories.append(page_category)
 
-        # Build categories, and add them to the file page.
-        categories = build_categories(mime_category)
-        pywikibot.output("    Add categories: " + ", ".join(categories))
+        category_wikilink = "[[Category:{0}|{0}]]".format(category)
+        category_wikilinks.append(category_wikilink)
 
-        page_categories = list(map(lambda c: pywikibot.Page(site, "Category:" + c), categories))
-        category_wikilinks = list(map(lambda c: "[[Category:" + c + "|" + c + "]]", categories))
-        summary = "Add the categor" + ("y" if len(category_wikilinks) <= 1 else "ies") + " " + ", ".join(category_wikilinks) + "."
+    file_page.text = textlib.replaceCategoryLinks(file_page.text, page_categories, site=file_page.site, addOnly=True)
 
-        file_page.put(
-            textlib.replaceCategoryLinks(file_page.get(), page_categories, site=file_page.site, addOnly=True),
-            asynchronous=True,
-            summary=summary
-        )
+    summary = "Add the {0} {1}.".format(
+        "categor" + ("y" if len(category_wikilinks) <= 1 else "ies"),
+        ", ".join(category_wikilinks)
+    )
 
-        f += 1
+    file_page.save(
+        summary=summary,
+        minor=False
+    )
 
-    # Output report.
-    pywikibot.output("")
-    pywikibot.output("Categorized {0} {1} out of {2} {3} ({4:.2%}) with {5} {6} and {7} {8}.".format(
+    status["f"] += 1
+
+    return status
+
+
+def create_report(f, p, w, e):
+    return ("Categorized {0} {1} out of {2} {3} ({4:.2%}) with {5} {6} and {7} {8}.".format(
         f,
         "file page" + ("s" if f != 1 else ""),
         p,
@@ -395,12 +391,105 @@ def categorize_files():
     ))
 
 
+class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
+    """Categorizer bot."""
+
+    def __init__(self, site, generator, **kwargs):
+        """
+        Initializer.
+        :param generator: The page generator that determines on which pages to work.
+        :param kwargs:
+        """
+
+        self.availableOptions.update({
+            'example': False,
+        })
+
+        super(CategorizerBot, self).__init__(site=site, generator=generator, **kwargs)
+
+        self.status = {
+            "f": 0,
+            "p": 0,
+            "w": 0,
+            "e": 0
+        }
+
+    def update_status(self, status):
+        combined_status = self.status
+        for key in status:
+            if key in combined_status:
+                combined_status[key] += status[key]
+            else:
+                combined_status[key] = status[key]
+        self.status = combined_status
+        return combined_status
+
+    def output_report(self):
+        status = self.status
+        report = create_report(**status)
+
+        pywikibot.output("")
+        pywikibot.output(report)
+
+    def run(self):
+        super(CategorizerBot, self).run()
+        pywikibot.output("")
+
+    def exit(self):
+        self.output_report()
+        super(CategorizerBot, self).exit()
+
+    def treat_page(self):
+        site = self.site
+        page = self.current_page
+        status = categorize_file_page(site, page, p=self.status["p"])
+        self.update_status(status)
+
+
+def remove_categories():
+    site = pywikibot.Site()
+    category = pywikibot.Category(site, "Category:Files")
+    generator = pagegenerators.PreloadingGenerator(pagegenerators.CategorizedPageGenerator(category=category))
+    for page in generator:
+        pywikibot.output("")
+
+        pywikibot.output(vars(page))
+        pywikibot.output(page.text)
+
+        page.text = textlib.replaceCategoryLinks(page.text, [], site=page.site)
+
+        page.save(
+            summary="Remove categories.",
+            # asynchronous=True,
+        )
+
+
 def main(*args):
+    option = {}
+
+    local_args = pywikibot.handle_args(args)
+    generator_factory = pagegenerators.GeneratorFactory()
+
+    for arg in local_args:
+        if arg == "-example":
+            option["example"] = True
+        else:
+            generator_factory.handleArg(arg)
+
+    site = pywikibot.Site()
+    generator = generator_factory.getCombinedGenerator(
+        pagegenerators.UnCategorizedImageGenerator(site=site),
+        preload=True
+    )
+    if generator is None:
+        pywikibot.bot.suggest_help(missing_generator=True)
+        return
+
+    bot = CategorizerBot(site, generator, **option)
+    bot.run()
+
     # remove_categories()
     # pywikibot.output("")
-    # pywikibot.output("")
-    categorize_files()
-    pywikibot.output("")
 
 
 if __name__ == "__main__":
