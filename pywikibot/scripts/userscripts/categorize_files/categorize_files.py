@@ -20,6 +20,7 @@ import re
 import pywikibot
 from pywikibot import pagegenerators, textlib
 from pywikibot.bot import SingleSiteBot, ExistingPageBot, NoRedirectPageBot
+from pywikibot.exceptions import NoPage, PageRelatedError
 from pywikibot.comms.http import requests
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -310,14 +311,22 @@ def categorize_file_page(site, page, p=0):
 
     pywikibot.output(f"Page {p + 1}:")
 
-    if not page.is_filepage():
+    is_file_page = page.is_filepage()
+    file_page = None
+    file_info = None
+    if is_file_page:
+        file_page = pywikibot.FilePage(page)
+        try:
+            file_info = file_page.latest_file_info
+        except (NoPage, PageRelatedError):
+            is_file_page = False
+
+    if not is_file_page:
         pywikibot.error("Page \"" + page.title(as_link=True) + "\" is not a file page. Skipping page...")
         pywikibot.output("")
         status["e"] += 1
         return status
 
-    file_page = pywikibot.FilePage(page)
-    file_info = file_page.latest_file_info
     mime = file_info.mime.lower()
 
     pywikibot.output("    Title: " + file_page.title(as_link=True))
@@ -401,10 +410,6 @@ class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
         :param kwargs:
         """
 
-        self.availableOptions.update({
-            'example': False,
-        })
-
         super().__init__(site=site, generator=generator, **kwargs)
 
         self.status = {
@@ -442,8 +447,13 @@ class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
     def treat_page(self):
         site = self.site
         page = self.current_page
-        status = categorize_file_page(site, page, p=self.status["p"])
-        self.update_status(status)
+        try:
+            status = categorize_file_page(site, page, p=self.status["p"])
+            self.update_status(status)
+        except Exception as exception:
+            pywikibot.exception(exception, tb=True)
+            pywikibot.output("")
+            self.status["e"] += 1
 
 
 def remove_categories():
@@ -471,10 +481,7 @@ def main(*args):
     generator_factory = pagegenerators.GeneratorFactory()
 
     for arg in local_args:
-        if arg == "-example":
-            option["example"] = True
-        else:
-            generator_factory.handleArg(arg)
+        generator_factory.handleArg(arg)
 
     site = pywikibot.Site()
     generator = generator_factory.getCombinedGenerator(
