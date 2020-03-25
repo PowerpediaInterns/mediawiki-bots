@@ -88,9 +88,17 @@ GLOBAL OPTIONS
                   modify it with command line.
 ```
 
+Default values can be modified by editing the `COMMAND_OPTION` dictionary.
+
 See also the wiki page on global options:
 
 [https://www.mediawiki.org/wiki/Manual:Pywikibot/Global_Options](https://www.mediawiki.org/wiki/Manual:Pywikibot/Global_Options)
+
+### Examples
+
+```
+python pwb.py categorize_files/categorize_files.py -total:500 -group:100
+```
 
 ## Put throttle adjustment
 
