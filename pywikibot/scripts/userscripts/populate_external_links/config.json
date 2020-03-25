@@ -1,0 +1,28 @@
+{
+    "sources": [
+        "C:\\Users\\User\\PycharmProjects\\mediawiki-bots\\pywikibot\\scripts\\userscripts\\populate_external_links\\2206921.xml",
+        "http://domain.tld/rss.xml",
+        "..."
+    ],
+    "queries": [
+        {
+            "pages": ["Test", "Nuclear", "Nuke"],
+            "keywords": ["Nuclear"],
+            "regexes": []
+        },
+        {
+            "pages": ["Test", "STEM", "Science, Technology, Engineering, Mathematics"],
+            "keywords": ["STEM"],
+            "regexes": []
+        },
+        {
+            "pages": ["Test"],
+            "keywords": ["TestTestTestTestTest"],
+            "regexes": [
+                "Washington",
+                {"pattern": "Savannah"},
+                {"pattern": "graduate", "flags": ["IGNORECASE", "DOTALL"]}
+            ]
+        }
+    ]
+}
