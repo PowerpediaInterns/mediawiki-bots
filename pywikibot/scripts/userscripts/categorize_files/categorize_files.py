@@ -1,4 +1,17 @@
 #!/usr/bin/env python
+"""categorize_files.py
+
+This Pywikibot script categorizes uncategorized files on the wiki based on the
+file's MIME type or extension.
+
+SCRIPT OPTIONS
+==============
+(Script arguments available for this bot)
+
+-total:n          Maximum number of pages to retrieve in total.
+
+-group:n          How many pages to preload at once.
+"""
 """
 Copyright 2019 David Wong
 
@@ -16,6 +29,8 @@ limitations under the License.
 """
 
 import re
+import os.path
+from copy import deepcopy
 
 import pywikibot
 from pywikibot import pagegenerators, textlib
@@ -26,266 +41,368 @@ from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
-category_mimes = {
+file_category = {
     "Images": {
-        "patterns": [
-            r"image/.*"
-        ],
-        "literals": [
-            "image/apng",
-            "image/bmp",
-            "image/gif",
-            "image/x-icon",
-            "image/jpeg",
-            "image/png",
-            "image/svg+xml",
-            "image/tiff",
-            "image/webp",
-            "image/vnd.microsoft.icon"
-        ]
+        "mimes": {
+            "patterns": [
+                r"image/.*"
+            ],
+            "literals": [
+                "image/apng",
+                "image/bmp",
+                "image/gif",
+                "image/x-icon",
+                "image/jpeg",
+                "image/png",
+                "image/svg+xml",
+                "image/tiff",
+                "image/webp",
+                "image/vnd.microsoft.icon"
+            ]
+        }
     },
     "Audios": {
-        "patterns": [
-            r"audio/.*"
-        ],
-        "literals": [
-            "audio/x-flac",
-            "application/flac",
-            "audio/flac",
-            "application/x-flac",
-            "audio/wav",
-            "application/x-wave",
-            "audio/wave",
-            "application/wave",
-            "application/wav",
-            "application/x-wav",
-            "audio/x-wave",
-            "audio/x-wav",
-            "audio/x-pn-wav",
-            "audio/mp3",
-            "application/mp3",
-            "application/x-mp3",
-            "audio/mpg",
-            "audio/mpeg3",
-            "audio/x-mp3",
-            "audio/x-mpegaudio",
-            "audio/mpeg",
-            "audio/x-mpeg3",
-            "audio/x-mpg",
-            "audio/x-mpeg",
-            "audio/mp1",
-            "application/mp1",
-            "application/aiff",
-            "audio/aiff",
-            "application/x-aif",
-            "application/aif",
-            "application/x-aiff",
-            "audio/x-aifc",
-            "audio/x-aiff",
-            "audio/aif",
-            "audio/aifc",
-            "audio/x-aif",
-            "audio/m4a",
-            "audio/mp4",
-            "application/x-m4a",
-            "application/x-m4p",
-            "audio/mpeg4",
-            "audio/x-m4b",
-            "audio/x-m4a",
-            "audio/x-m4p",
-            "audio/x-mp4",
-            "audio/x-ms-wma",
-            "application/x-ms-wma",
-            "application/wma",
-            "audio/wma",
-            "audio/x-scpls",
-            "audio/x-mpegurl",
-            "audio/x-ms-asf",
-            "audio/x-ms-wax",
-            "audio/x-ms-wvx",
-            "audio/aacp",
-            "audio/aac",
-            "audio/3gpp",
-            "audio/3gpp2",
-            "audio/x-aac",
-            "audio/x-ogg",
-            "audio/vorbis",
-            "audio/ogg",
-            "audio/opus",
-            "audio/webm",
-            "audio/midi",
-            "audio/x-midi",
-            "audio/x-matroska",
-            "audio/speex"
-        ]
+        "mimes": {
+            "patterns": [
+                r"audio/.*"
+            ],
+            "literals": [
+                "audio/x-flac",
+                "application/flac",
+                "audio/flac",
+                "application/x-flac",
+                "audio/wav",
+                "application/x-wave",
+                "audio/wave",
+                "application/wave",
+                "application/wav",
+                "application/x-wav",
+                "audio/x-wave",
+                "audio/x-wav",
+                "audio/x-pn-wav",
+                "audio/mp3",
+                "application/mp3",
+                "application/x-mp3",
+                "audio/mpg",
+                "audio/mpeg3",
+                "audio/x-mp3",
+                "audio/x-mpegaudio",
+                "audio/mpeg",
+                "audio/x-mpeg3",
+                "audio/x-mpg",
+                "audio/x-mpeg",
+                "audio/mp1",
+                "application/mp1",
+                "application/aiff",
+                "audio/aiff",
+                "application/x-aif",
+                "application/aif",
+                "application/x-aiff",
+                "audio/x-aifc",
+                "audio/x-aiff",
+                "audio/aif",
+                "audio/aifc",
+                "audio/x-aif",
+                "audio/m4a",
+                "audio/mp4",
+                "application/x-m4a",
+                "application/x-m4p",
+                "audio/mpeg4",
+                "audio/x-m4b",
+                "audio/x-m4a",
+                "audio/x-m4p",
+                "audio/x-mp4",
+                "audio/x-ms-wma",
+                "application/x-ms-wma",
+                "application/wma",
+                "audio/wma",
+                "audio/x-scpls",
+                "audio/x-mpegurl",
+                "audio/x-ms-asf",
+                "audio/x-ms-wax",
+                "audio/x-ms-wvx",
+                "audio/aacp",
+                "audio/aac",
+                "audio/3gpp",
+                "audio/3gpp2",
+                "audio/x-aac",
+                "audio/x-ogg",
+                "audio/vorbis",
+                "audio/ogg",
+                "audio/opus",
+                "audio/webm",
+                "audio/midi",
+                "audio/x-midi",
+                "audio/x-matroska",
+                "audio/speex"
+            ]
+        }
     },
     "Videos": {
-        "patterns": [
-            r"video/.*"
-        ],
-        "literals": [
-            "video/3gpp",
-            "video/3gpp2",
-            "video/avi",
-            "video/mkv",
-            "video/mp4",
-            "video/mp4v-es",
-            "video/mpeg",
-            "video/mp2t",
-            "video/quicktime",
-            "video/x-quicktime",
-            "video/webm",
-            "video/ogg",
-            "video/theora",
-            "video/x-m4v",
-            "video/x-matroska",
-            "video/x-matroska-3d",
-            "video/x-mkv",
-            "video/x-ms-asf",
-            "video/x-ms-avi",
-            "video/x-ms-video",
-            "video/x-ms-wax",
-            "video/x-ms-wmv",
-            "video/x-ms-wvx",
-            "video/x-msvideo"
+        "mimes": {
+            "patterns": [
+                r"video/.*"
+            ],
+            "literals": [
+                "video/3gpp",
+                "video/3gpp2",
+                "video/avi",
+                "video/mkv",
+                "video/mp4",
+                "video/mp4v-es",
+                "video/mpeg",
+                "video/mp2t",
+                "video/quicktime",
+                "video/x-quicktime",
+                "video/webm",
+                "video/ogg",
+                "video/theora",
+                "video/x-m4v",
+                "video/x-matroska",
+                "video/x-matroska-3d",
+                "video/x-mkv",
+                "video/x-ms-asf",
+                "video/x-ms-avi",
+                "video/x-ms-video",
+                "video/x-ms-wax",
+                "video/x-ms-wmv",
+                "video/x-ms-wvx",
+                "video/x-msvideo"
+            ]
+        }
+    },
+    "Audios or videos": {
+        "mimes": [
+            "application/ogg",
+            "application/x-ogg",
+            "application/mpeg",
+            "application/mpeg3",
+            "application/mpeg4",
+            "application/mp4"
+            "application/x-m4b",
+            "application/x-mp4"
         ]
     },
-    "Audios or videos": [
-        "application/ogg",
-        "application/x-ogg",
-        "application/mpeg",
-        "application/mpeg3",
-        "application/mpeg4",
-        "application/mp4"
-        "application/x-m4b",
-        "application/x-mp4"
-    ],
-    "PDFs": "application/pdf",
-    "Text files": "text/plain",
+    "PDFs": {"mimes": "application/pdf"},
+    "Text files": {"mimes": "text/plain"},
 
     "Microsoft Word documents": {
-        "patterns": [
-            r"application/msword.*",
-            r"application/vnd\.openxmlformats-officedocument\.wordprocessingml.*"
-            r"application/vnd\.ms-word.*"
-        ],
-        "literals": [
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
-            "application/vnd.ms-word.document.macroEnabled.12",
-            "application/vnd.ms-word.template.macroEnabled.12"
+        "mimes": {
+            "patterns": [
+                r"application/msword.*",
+                r"application/vnd\.openxmlformats-officedocument\.wordprocessingml.*"
+                r"application/vnd\.ms-word.*"
+            ],
+            "literals": [
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+                "application/vnd.ms-word.document.macroEnabled.12",
+                "application/vnd.ms-word.template.macroEnabled.12"
+            ]
+        },
+        "extensions": [
+            "docx",
+            "doc",
+            "docm",
+            "dotx",
+            "dotm",
+            "docb"
         ]
     },
     "Microsoft PowerPoint documents": {
-        "patterns": [
-            r"application/vnd\.ms-powerpoint.*",
-            r"application/vnd\.openxmlformats-officedocument\.presentationml.*"
-        ],
-        "literals": [
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/vnd.openxmlformats-officedocument.presentationml.template",
-            "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
-            "application/vnd.ms-powerpoint.addin.macroEnabled.12",
-            "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
-            "application/vnd.ms-powerpoint.template.macroEnabled.12",
-            "application/vnd.ms-powerpoint.slideshow.macroEnabled.12"
+        "mimes": {
+            "patterns": [
+                r"application/vnd\.ms-powerpoint.*",
+                r"application/vnd\.openxmlformats-officedocument\.presentationml.*"
+            ],
+            "literals": [
+                "application/vnd.ms-powerpoint",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/vnd.openxmlformats-officedocument.presentationml.template",
+                "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+                "application/vnd.ms-powerpoint.addin.macroEnabled.12",
+                "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+                "application/vnd.ms-powerpoint.template.macroEnabled.12",
+                "application/vnd.ms-powerpoint.slideshow.macroEnabled.12"
+            ],
+        },
+        "extensions": [
+            "pptx",
+            "ppt",
+            "pps",
+            "pptm",
+            "potx",
+            "potm",
+            "ppam",
+            "ppsx",
+            "ppsm",
+            "sldx",
+            "sldm"
         ]
     },
     "Microsoft Excel documents": {
-        "patterns": [
-            r"application/vnd\.ms-excel.*",
-            r"application/vnd\.openxmlformats-officedocument\.spreadsheetml.*"
-        ],
-        "literals": [
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
-            "application/vnd.ms-excel.sheet.macroEnabled.12",
-            "application/vnd.ms-excel.template.macroEnabled.12",
-            "application/vnd.ms-excel.addin.macroEnabled.12",
-            "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
+        "mimes": {
+            "patterns": [
+                r"application/vnd\.ms-excel.*",
+                r"application/vnd\.openxmlformats-officedocument\.spreadsheetml.*"
+            ],
+            "literals": [
+                "application/vnd.ms-excel",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+                "application/vnd.ms-excel.sheet.macroEnabled.12",
+                "application/vnd.ms-excel.template.macroEnabled.12",
+                "application/vnd.ms-excel.addin.macroEnabled.12",
+                "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
+            ]
+        },
+        "extensions": [
+            "xlsx",
+            "xls",
+            "xlsm",
+            "xltx",
+            "xltm",
+            "xlsb",
+            "xlam"
         ]
     },
     "Microsoft Visio documents": {
-        "patterns": [
-            r"application/vnd\.ms-visio.*"
-        ],
-        "literals": [
-            "application/visio",
-            "application/x-visio",
-            "application/vnd.visio",
-            "application/visio.drawing",
-            "application/vsd",
-            "application/x-vsd",
-            "image/x-vsd",
-            "application/vnd.ms-visio.drawing",
-            "application/vnd.ms-visio.viewer",
-            "application/vnd.ms-visio.drawing.main+xml",
-            "application/vnd.ms-visio.template.main+xml",
-            "application/vnd.ms-visio.stencil.main+xml",
-            "application/vnd.ms-visio.drawing.macroEnabled.main+xml",
-            "application/vnd.ms-visio.template.macroEnabled.main+xml",
-            "application/vnd.ms-visio.stencil.macroEnabled.main+xml"
+        "mimes": {
+            "patterns": [
+                r"application/vnd\.ms-visio.*"
+            ],
+            "literals": [
+                "application/visio",
+                "application/x-visio",
+                "application/vnd.visio",
+                "application/visio.drawing",
+                "application/vsd",
+                "application/x-vsd",
+                "image/x-vsd",
+                "application/vnd.ms-visio.drawing",
+                "application/vnd.ms-visio.viewer",
+                "application/vnd.ms-visio.drawing.main+xml",
+                "application/vnd.ms-visio.template.main+xml",
+                "application/vnd.ms-visio.stencil.main+xml",
+                "application/vnd.ms-visio.drawing.macroEnabled.main+xml",
+                "application/vnd.ms-visio.template.macroEnabled.main+xml",
+                "application/vnd.ms-visio.stencil.macroEnabled.main+xml"
+            ]
+        },
+        "extensions": [
+            "vsdx",
+            "vsd"
         ]
     },
 
-    "OpenDocument text documents": "application/vnd.oasis.opendocument.text",
-    "OpenDocument presentation documents": "application/vnd.oasis.opendocument.presentation",
-    "OpenDocument spreadsheet documents": "application/vnd.oasis.opendocument.spreadsheet",
-    "OpenDocument graphics documents": "application/vnd.oasis.opendocument.graphics"
+    "OpenDocument text documents": {"mimes": "application/vnd.oasis.opendocument.text"},
+    "OpenDocument presentation documents": {"mimes": "application/vnd.oasis.opendocument.presentation"},
+    "OpenDocument spreadsheet documents": {"mimes": "application/vnd.oasis.opendocument.spreadsheet"},
+    "OpenDocument graphics documents": {"mimes": "application/vnd.oasis.opendocument.graphics"}
+}
+
+category_alias = {
+    "Microsoft Word documents": "Word files",
+    "Microsoft PowerPoint documents": "Powerpoint files",
+    "Microsoft Excel documents": "Excel files"
+}
+
+COMMAND_OPTION = {
+    "total": 100,
+    "group": 50
 }
 
 
-def flatten_category_mimes():
+def flatten_file_category():
     """
-    Flatten the `category_mimes` dictionary to allow hashtable lookups by MIME type.
+    Flatten the `file_category` dictionary to allow hashtable lookups by metadata, such as MIME type and extension.
     :return:
     """
 
     mime_categories = {}
-    pattern_category_regexes = []
+    mime_pattern_category_regexes = []
 
-    for category, mimes in category_mimes.items():
-        c = category
+    extension_categories = {}
+    extension_pattern_category_regexes = []
+
+    for category, metadata in file_category.items():
+        ca = (category_alias[category] if category in category_alias else category)
+        c = ca
         if category.endswith(" documents"):
             c = ["Office documents"]
             if category.startswith("Microsoft "):
                 c.append("Microsoft Office documents")
             elif category.startswith("OpenDocument "):
                 c.append("OpenDocument documents")
-            c.append(category)
+            c.append(ca)
 
-        if isinstance(mimes, str):
-            mime_categories[mimes.lower()] = c
-        else:
-            literals = mimes
+        if not isinstance(metadata, dict):
+            raise TypeError("`metadata` must be a dictionary.")
 
-            if isinstance(mimes, dict):
-                if "literals" in mimes:
-                    literals = mimes["literals"]
+        if "mimes" in metadata:
+            mimes = metadata["mimes"]
+            if isinstance(mimes, str):
+                mime_categories[mimes.lower()] = c
+            else:
+                literals = mimes
 
-                if "patterns" in mimes:
-                    patterns = mimes["patterns"]
-                    if isinstance(patterns, str):
-                        patterns = [patterns]
+                if isinstance(mimes, dict):
+                    if "literals" in mimes:
+                        literals = mimes["literals"]
 
-                    for p in patterns:
-                        regex = re.compile(p, flags=re.IGNORECASE)
-                        pattern_category_regexes.append({
-                            "pattern": p,
-                            "category": c,
-                            "regex": regex
-                        })
+                    if "patterns" in mimes:
+                        patterns = mimes["patterns"]
+                        if isinstance(patterns, str):
+                            patterns = [patterns]
 
-            for m in literals:
-                mime_categories[m.lower()] = c
+                        for p in patterns:
+                            regex = re.compile(p, flags=re.IGNORECASE)
+                            mime_pattern_category_regexes.append({
+                                "pattern": p,
+                                "category": c,
+                                "regex": regex
+                            })
 
-    return mime_categories, pattern_category_regexes
+                for m in literals:
+                    mime_categories[m.lower()] = c
+
+        if "extensions" in metadata:
+            extensions = metadata["extensions"]
+            if isinstance(extensions, str):
+                extension_categories[extensions.lower()] = c
+            else:
+                literals = extensions
+
+                if isinstance(extensions, dict):
+                    if "literals" in extensions:
+                        literals = extensions["literals"]
+
+                    if "patterns" in extensions:
+                        patterns = extensions["patterns"]
+                        if isinstance(patterns, str):
+                            patterns = [patterns]
+
+                        for p in patterns:
+                            regex = re.compile(p, flags=re.IGNORECASE)
+                            extension_pattern_category_regexes.append({
+                                "pattern": p,
+                                "category": c,
+                                "regex": regex
+                            })
+
+                for e in literals:
+                    extension_categories[e.lower()] = c
+
+    return {
+        "mime_categories": mime_categories,
+        "mime_pattern_category_regexes": mime_pattern_category_regexes,
+        "extension_categories": extension_categories,
+        "extension_pattern_category_regexes": extension_pattern_category_regexes
+    }
 
 
-mime_categories, pattern_category_regexes = flatten_category_mimes()
+flattened_categories = flatten_file_category()
 
 
 def build_categories(mime_category):
@@ -327,37 +444,65 @@ def categorize_file_page(site, page, p=0):
         status["e"] += 1
         return status
 
+    uri = file_page.full_url()
     mime = file_info.mime.lower()
 
     pywikibot.output("    Title: " + file_page.title(as_link=True))
-    pywikibot.output("    URI: " + file_page.full_url())
+    pywikibot.output("    URI: " + uri)
     pywikibot.output("    MIME type: " + mime)
 
-    # Find a matching category for the MIME type.
-    mime_category = None
+    # Find a matching category for the file's MIME type or extension.
+    mime_categories = flattened_categories["mime_categories"]
+    mime_pattern_category_regexes = flattened_categories["mime_pattern_category_regexes"]
+
+    found_category = None
     if mime in mime_categories:
-        mime_category = mime_categories[mime]
+        found_category = mime_categories[mime]
     else:
         pywikibot.warning(f"Unrecognized MIME type \"{mime}\". Attempting to search by regex...")
         status["w"] += 1
 
-        for pattern_category_regex in pattern_category_regexes:
+        for pattern_category_regex in mime_pattern_category_regexes:
             regex = pattern_category_regex["regex"]
             if regex.search(mime) is not None:
                 category = pattern_category_regex["category"]
                 pywikibot.warning(f"Found category \"{category}\" for unrecognized MIME type \"{mime}\".")
                 status["w"] += 1
-                mime_category = category
+                found_category = category
                 break
 
-    if mime_category is None:
-        pywikibot.error(f"No category found for MIME type \"{mime}\". Skipping file page...")
-        pywikibot.output("")
-        status["e"] += 1
-        return status
+    if found_category is None:
+        pywikibot.warning(f"No category found for MIME type \"{mime}\". Attempting to search by file extension...")
+        status["w"] += 1
+
+        file_extension = os.path.splitext(uri)[1][1:].strip().lower()
+        if len(file_extension) > 0:
+            extension_categories = flattened_categories["extension_categories"]
+            extension_pattern_category_regexes = flattened_categories["extension_pattern_category_regexes"]
+
+            if file_extension in extension_categories:
+                found_category = extension_categories[file_extension]
+            else:
+                pywikibot.warning(f"Unrecognized file extension \"{file_extension}\". Attempting to search by regex...")
+                status["w"] += 1
+
+                for pattern_category_regex in extension_pattern_category_regexes:
+                    regex = pattern_category_regex["regex"]
+                    if regex.search(file_extension) is not None:
+                        category = pattern_category_regex["category"]
+                        pywikibot.warning(f"Found category \"{category}\" for unrecognized file extension \"{file_extension}\".")
+                        status["w"] += 1
+                        found_category = category
+                        break
+
+        if found_category is None:
+            pywikibot.error(f"No category found for MIME type \"{mime}\" or file extension \"{file_extension}\". Skipping file page...")
+            pywikibot.output("")
+            status["e"] += 1
+            return status
 
     # Build categories, and add them to the file page.
-    categories = build_categories(mime_category)
+    categories = build_categories(found_category)
     pywikibot.output("    Add categories: " + ", ".join(categories))
 
     page_categories = []
@@ -400,15 +545,21 @@ def create_report(f, p, w, e):
     ))
 
 
-class CategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
-    """Categorizer bot."""
+class FileCategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
+    """File categorizer bot."""
 
     def __init__(self, site, generator, **kwargs):
         """
         Initializer.
+        :param site: The site.
         :param generator: The page generator that determines on which pages to work.
         :param kwargs:
         """
+
+        self.availableOptions.update({
+            "total": kwargs["total"],
+            "group": kwargs["group"]
+        })
 
         super().__init__(site=site, generator=generator, **kwargs)
 
@@ -475,24 +626,35 @@ def remove_categories():
 
 
 def main(*args):
-    option = {}
+    option = deepcopy(COMMAND_OPTION)
 
     local_args = pywikibot.handle_args(args)
     generator_factory = pagegenerators.GeneratorFactory()
 
     for arg in local_args:
-        generator_factory.handleArg(arg)
+        key, seperator, value = arg.partition(":")
+        stripped_value = value.strip()
+        if key == "-total":
+            total = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter total:").strip())
+            option["total"] = int(total)
+        elif key == "-group":
+            group = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter group:").strip())
+            option["group"] = int(group)
+        else:
+            generator_factory.handleArg(arg)
 
     site = pywikibot.Site()
     generator = generator_factory.getCombinedGenerator(
-        pagegenerators.UnCategorizedImageGenerator(site=site),
-        preload=True
+        pagegenerators.PreloadingGenerator(
+            pagegenerators.UnCategorizedImageGenerator(site=site, total=option["total"]),
+            groupsize=option["group"]
+        )
     )
     if generator is None:
         pywikibot.bot.suggest_help(missing_generator=True)
         return
 
-    bot = CategorizerBot(site, generator, **option)
+    bot = FileCategorizerBot(site, generator, **option)
     bot.run()
 
     # remove_categories()

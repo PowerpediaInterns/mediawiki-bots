@@ -1,6 +1,6 @@
 # categorize_files.py
 
-This Pywikibot script categorizes uncategorized files on the wiki based on the file's MIME type.
+This Pywikibot script categorizes uncategorized files on the wiki based on the file's MIME type or extension.
 
 ## Requirements
 
@@ -15,6 +15,20 @@ No other modules to install.
 
 ```
 python pwb.py categorize_files/categorize_files.py -help
+
+categorize_files.py
+
+This Pywikibot script categorizes uncategorized files on the wiki based on the
+file's MIME type or extension.
+
+SCRIPT OPTIONS
+==============
+(Script arguments available for this bot)
+
+-total:n          Maximum number of pages to retrieve in total.
+
+-group:n          How many pages to preload at once.
+
 
 GLOBAL OPTIONS
 ==============
