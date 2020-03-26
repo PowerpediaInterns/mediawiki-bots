@@ -1,6 +1,6 @@
 {
     "sources": [
-        "C:\\Users\\User\\PycharmProjects\\mediawiki-bots\\pywikibot\\scripts\\userscripts\\populate_external_links\\2206921.xml",
+        "C:\\Users\\User\\PycharmProjects\\mediawiki-bots\\pywikibot\\scripts\\userscripts\\feed_external_links\\2206921.xml",
         "http://domain.tld/rss.xml",
         "..."
     ],

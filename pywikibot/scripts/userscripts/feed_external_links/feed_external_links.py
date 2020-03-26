@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""populate_external_links.py
+"""feed_external_links.py
 
 This Pywikibot script searches a list of web feeds, finds entries matched by
 keywords or regexes, and adds the links to the "External links" section of
@@ -71,7 +71,7 @@ class ConfigType(Enum):
 
 
 CONFIG_FILENAME = "config.json"
-CONFIG_PAGE_TITLE = f"MediaWiki:Populate external links/{CONFIG_FILENAME}"
+CONFIG_PAGE_TITLE = f"MediaWiki:Feed external links/{CONFIG_FILENAME}"
 
 COMMAND_OPTION = {
     "config_type": ConfigType.FILE,
@@ -343,7 +343,7 @@ def log_external_links_added(number_of_external_links, title, text):
         ))
 
 
-def populate_external_links(page_title, page_text, entries):
+def feed_external_links(page_title, page_text, entries):
     wikicode = mwparserfromhell.parse(page_text)
 
     number_of_external_links_added = 0
@@ -443,7 +443,7 @@ def save_external_links(page, title, entries):
 
     page_text = page.text
 
-    revised_page_text, number_of_external_links_added = populate_external_links(title, page_text, entries)
+    revised_page_text, number_of_external_links_added = feed_external_links(title, page_text, entries)
 
     if number_of_external_links_added <= 0:
         pywikibot.output(f"No external links added to page \"{title}\".")
@@ -486,8 +486,8 @@ def PageEntryGenerator(site=None, title_entries=None, page_entries=None):
             yield page
 
 
-class PopulateExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
-    """Populate external links bot."""
+class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
+    """Feed external links bot."""
 
     def __init__(self, site, generator, title_entries, page_entries, **kwargs):
         """
@@ -568,7 +568,7 @@ def main(*args):
         pywikibot.bot.suggest_help(missing_generator=True)
         return
 
-    bot = PopulateExternalLinksBot(site, generator, title_entries, page_entries, **option)
+    bot = FeedExternalLinksBot(site, generator, title_entries, page_entries, **option)
     bot.run()
 
 

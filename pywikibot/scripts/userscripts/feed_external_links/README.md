@@ -1,4 +1,4 @@
-# populate_external_links.py
+# feed_external_links.py
 
 This Pywikibot script searches a list of web feeds, finds entries matched by keywords or regexes, and adds the links to the "External links" section of specified wiki pages.
 
@@ -16,9 +16,9 @@ pip install feedparser
 ## Usage
 
 ```
-python pwb.py populate_external_links/populate_external_links.py -help
+python pwb.py feed_external_links/feed_external_links.py -help
 
-populate_external_links.py
+feed_external_links.py
 
 This Pywikibot script searches a list of web feeds, finds entries matched by
 keywords or regexes, and adds the links to the "External links" section of
@@ -69,7 +69,7 @@ GLOBAL OPTIONS
 -help             Show this help text.
 
 -log              Enable the log file, using the default filename
-                  'populate_external_links-bot.log'
+                  'feed_external_links-bot.log'
                   Logs will be stored in the logs subdirectory.
 
 -log:xyz          Enable the log file, using 'xyz' as the filename.
@@ -113,12 +113,12 @@ See also the wiki page on global options:
 
 Local config file with a custom path:
 ```
-python pwb.py populate_external_links/populate_external_links.py "-config-path:./scripts/userscripts/populate_external_links/config.json"
+python pwb.py feed_external_links/feed_external_links.py "-config-path:./scripts/userscripts/feed_external_links/config.json"
 ```
 
 Remote config file on a wiki page:
 ```
-python pwb.py populate_external_links/populate_external_links.py -config-type:wiki "-config-page-title:MediaWiki:Populate external links/config.json"
+python pwb.py feed_external_links/feed_external_links.py -config-type:wiki "-config-page-title:MediaWiki:Feed external links/config.json"
 ```
 
 ## Put throttle adjustment
@@ -127,7 +127,7 @@ The put throttle is managed by Pywikibot. A minimum value in seconds can be spec
 
 A custom put throttle of 1 second can be added as a command-line argument:
 ```
-python pwb.py populate_external_links/populate_external_links.py -put_throttle:1
+python pwb.py feed_external_links/feed_external_links.py -put_throttle:1
 ```
 
 A default put throttle can be specified in the "user-config.py" file. See the section starting on line 173:
@@ -138,14 +138,14 @@ A default put throttle can be specified in the "user-config.py" file. See the se
 
 The script uses a config file, named "config.json" by default, stored in the JSON format. It will use the file locally in the current working directory.
 
-The command-line options `-config-type:wiki` and `-config-page-title:x` can be used to specify a config file hosted on the wiki. On the wiki, a page titled "MediaWiki:Populate external links/config.json" can be created. By placing the config file on the wiki, the config file can be shared and updated, and the bot can be controlled by it.
+The command-line options `-config-type:wiki` and `-config-page-title:x` can be used to specify a config file hosted on the wiki. On the wiki, a page titled "MediaWiki:Feed external links/config.json" can be created. By placing the config file on the wiki, the config file can be shared and updated, and the bot can be controlled by it.
 
 ### Example
 
 ```json
 {
     "sources": [
-        "C:\\Users\\User\\PycharmProjects\\mediawiki-bots\\pywikibot\\scripts\\userscripts\\populate_external_links\\2206921.xml",
+        "C:\\Users\\User\\PycharmProjects\\mediawiki-bots\\pywikibot\\scripts\\userscripts\\feed_external_links\\2206921.xml",
         "http://domain.tld/rss.xml",
         "..."
     ],
