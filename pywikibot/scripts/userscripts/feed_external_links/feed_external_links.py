@@ -228,7 +228,7 @@ get_publish_date = attrgetter("published_parsed")
 def process_matches(queries, matches):
     title_entries = {}
 
-    # Add all matches to a page in `page_entries`.
+    # Add all matches to a page title in `title_entries`.
     for q, query in enumerate(queries):
         entries = matches[q]
         if len(entries) > 0:
