@@ -518,10 +518,14 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
 
     def treat_page(self):
         page = self.current_page
-        title = page.title()
-        page_entries = self.page_entries
-        entries = (page_entries[page] if page in page_entries else self.title_entries[title])
-        save_external_links(page, title, entries)
+        try:
+            title = page.title()
+            page_entries = self.page_entries
+            entries = (page_entries[page] if page in page_entries else self.title_entries[title])
+            save_external_links(page, title, entries)
+        except Exception as exception:
+            pywikibot.exception(exception, tb=True)
+            pywikibot.output("")
 
 
 def main(*args):
