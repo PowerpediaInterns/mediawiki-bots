@@ -117,8 +117,8 @@ def fetch_config(option):
 
 def fetch_feeds(sources):
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(feedparser.parse, source) for source in sources]
-        feeds = [future.result() for future in concurrent.futures.as_completed(futures)]
+        futures = {executor.submit(feedparser.parse, source): source for source in sources}
+        feeds = {future.result(): futures[future] for future in concurrent.futures.as_completed(futures)}
         return feeds
 
 
@@ -271,12 +271,17 @@ def process_matches(queries, matches):
 def get_title_entries(feeds, queries):
     matches = [[] for i in range(len(queries))]
 
-    for feed in feeds:
-        if "bozo_exception" in feed:
-            pywikibot.exception(feed["bozo_exception"])
-            pywikibot.output("")
+    for feed, source in feeds.items():
+        pywikibot.output(f"Parsing feed from source \"{source}\"...", newline=False)
 
-        search_entries(feed, queries, matches)
+        if "bozo_exception" in feed:
+            pywikibot.output("")
+            pywikibot.exception(feed["bozo_exception"])
+        else:
+            search_entries(feed, queries, matches)
+            pywikibot.output(" Done.")
+
+        pywikibot.output("")
 
     title_entries = process_matches(queries, matches)
 
