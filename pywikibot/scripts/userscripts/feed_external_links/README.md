@@ -181,6 +181,6 @@ In this example, the "Test" page appears in all 3 queries. The keywords "Nuclear
 
 The regex can be a pattern string or an object containing a "pattern" string and/or a "flags" array. The flags are described in the [Python documentation](https://docs.python.org/3/library/re.html#re.A).
 
-Keywords are matched case insensitively and excluding word boundaries. This means that "Nuclear" will match "nuclear" but not "nuclearization".
+Keywords are matched case insensitively and with word boundaries. This means that "Nuclear" will match "nuclear" but not "nuclearization".
 
 If case sensitivity and/or word boundaries are desired, a regex can be used instead. For example, "Washington" will match "Washington", "non-Washington", and "Washington's" but not "washington".
