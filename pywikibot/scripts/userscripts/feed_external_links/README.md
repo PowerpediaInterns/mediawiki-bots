@@ -26,7 +26,7 @@ specified wiki pages.
 
 SCRIPT OPTIONS
 ==============
-(Script arguments available for this bot)
+(Arguments available for this script)
 
 -config-type:x          Config type of "file" or "wiki".
                         For "file", it retrieves the config file locally using
@@ -43,6 +43,15 @@ SCRIPT OPTIONS
                         `-config-type:wiki` argument.
 
 -group:n                How many pages to preload at once.
+
+-proxy:x                Specify the same proxy as both HTTP and HTTPS for
+                        all sources.
+
+-http-proxy:x           Specify an HTTP proxy for all sources.
+
+-https-proxy:x          Specify an HTTPS proxy for all sources.
+
+-proxies-path:x         File path of the proxies file.
 
 
 GLOBAL OPTIONS
@@ -121,6 +130,17 @@ Remote config file on a wiki page:
 python pwb.py feed_external_links/feed_external_links.py -config-type:wiki "-config-page-title:MediaWiki:Feed external links/config.json"
 ```
 
+Specifying proxies from the command line:
+```
+python pwb.py feed_external_links/feed_external_links.py "-proxy:http://localhost:8888/"
+python pwb.py feed_external_links/feed_external_links.py "-http-proxy:http://localhost:8888/" "-https-proxy:https://localhost:8888/"
+```
+
+Specifying proxies from the proxies file:
+```
+python pwb.py feed_external_links/feed_external_links.py "-proxies-path:./scripts/userscripts/feed_external_links/proxies.json"
+```
+
 ## Put throttle adjustment
 
 The put throttle is managed by Pywikibot. A minimum value in seconds can be specified to override and increase the speed of the page edits. However, if the server becomes overloaded or the bot account becomes rate limited, Pywikibot automatically adjusts the put throttle by increasing it and then decreasing it when server the allows it.
@@ -138,7 +158,7 @@ A default put throttle can be specified in the "user-config.py" file. See the se
 
 The script uses a config file, named "config.json" by default, stored in the JSON format. It will use the file locally in the current working directory.
 
-The command-line options `-config-type:wiki` and `-config-page-title:x` can be used to specify a config file hosted on the wiki. On the wiki, a page titled "MediaWiki:Feed external links/config.json" can be created. By placing the config file on the wiki, the config file can be shared and updated, and the bot can be controlled by it.
+The command-line arguments `-config-type:wiki` and `-config-page-title:x` can be used to specify a config file hosted on the wiki. On the wiki, a page titled "MediaWiki:Feed external links/config.json" can be created. By placing the config file on the wiki, the config file can be shared and updated, and the bot can be controlled by it.
 
 ### Example
 
@@ -181,6 +201,33 @@ In this example, the "Test" page appears in all 3 queries. The keywords "Nuclear
 
 The regex can be a pattern string or an object containing a "pattern" string and/or a "flags" array. The flags are described in the [Python documentation](https://docs.python.org/3/library/re.html#re.A).
 
-Keywords are matched case insensitively and with word boundaries. This means that "Nuclear" will match "nuclear" but not "nuclearization".
+Keywords are matched case insensitively surrounded by word boundaries. This means that "Nuclear" will match "nuclear" but not "nuclearization".
 
 If case sensitivity and/or word boundaries are desired, a regex can be used instead. For example, "Washington" will match "Washington", "non-Washington", and "Washington's" but not "washington".
+
+## Proxies file
+
+The script may use an additional file, named "proxies.json" by default, stored in the JSON format. The file path must be supplied using the command-line argument `-proxies-path:x`.
+
+The advantage of using the proxies file over the command-line arguments is that different proxies can be specified for different sources.
+
+### Example
+```json
+{
+    ".*": "http://localhost:8888/",
+    "^https?://localhost/": "http://localhost:8888/",
+    "^https?://10\\.0\\.0\\.[0-9]+/": {
+        "http": "http://10.0.0.118/",
+        "https": "https://10.0.0.118/"
+    },
+    "^https?://(www\\.)?domain.tld/": {
+        "http": "http://domain.tld:8888/"
+    }
+}
+```
+
+The key is a regex pattern. The value can be either a proxy string or an object that contains keys as proxy schemes and values as proxy strings.
+
+In the first key-value pair, the regex pattern ".*" matches all sources and specifies a "http://localhost:8888/" proxy for all of them.
+
+In the second key-value pair, the regex pattern "^https?://localhost/" matches all sources starting with "http://localhost/" or "https://localhost/" and specifies a "http://localhost:8888/" proxy for all of them.

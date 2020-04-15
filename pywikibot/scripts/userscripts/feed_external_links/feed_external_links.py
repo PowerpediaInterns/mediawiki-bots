@@ -7,7 +7,7 @@ specified wiki pages.
 
 SCRIPT OPTIONS
 ==============
-(Script arguments available for this bot)
+(Arguments available for this script)
 
 -config-type:x          Config type of "file" or "wiki".
                         For "file", it retrieves the config file locally using
@@ -24,6 +24,15 @@ SCRIPT OPTIONS
                         `-config-type:wiki` argument.
 
 -group:n                How many pages to preload at once.
+
+-proxy:x                Specify the same proxy as both HTTP and HTTPS for
+                        all sources.
+
+-http-proxy:x           Specify an HTTP proxy for all sources.
+
+-https-proxy:x          Specify an HTTPS proxy for all sources.
+
+-proxies-path:x         File path of the proxies file.
 """
 """
 Copyright 2020 David Wong
@@ -50,6 +59,7 @@ from copy import deepcopy
 import math
 import json
 import feedparser
+import urllib.request
 
 import mwparserfromhell
 from mwparserfromhell.nodes.external_link import ExternalLink
@@ -82,10 +92,18 @@ COMMAND_OPTION = {
 }
 
 
-def fetch_config_file(path):
+def fetch_json_file(path):
     with open(path, encoding="utf8") as file:
-        config = json.load(file)
-        return config
+        data = json.load(file)
+        return data
+
+
+def fetch_config_file(path):
+    return fetch_json_file(path)
+
+
+def fetch_proxies_file(path):
+    return fetch_json_file(path)
 
 
 def fetch_config_wiki_page(title):
@@ -100,10 +118,10 @@ def fetch_config_wiki_page(title):
     return config
 
 
-def fetch_config(option):
-    config_type = option["config_type"]
+def fetch_config(command_option):
+    config_type = command_option["config_type"]
     if config_type == ConfigType.WIKI:
-        config_page_title = option["config_page_title"]
+        config_page_title = command_option["config_page_title"]
         try:
             return fetch_config_wiki_page(config_page_title)
         except (pywikibot.exceptions.NoPage, json.decoder.JSONDecodeError) as exception:
@@ -111,13 +129,70 @@ def fetch_config(option):
             pywikibot.output("")
             pywikibot.output("")
 
-    config_path = option["config_path"]
+    config_path = command_option["config_path"]
     return fetch_config_file(config_path)
 
 
-def fetch_feeds(sources):
+def get_source_options(command_option, sources):
+    # Create proxy handlers.
+    proxy_handler = None
+    proxies = {}
+    has_proxy = False
+    if "proxy" in command_option:
+        proxy = command_option["proxy"]
+        proxies["http"] = proxy
+        proxies["https"] = proxy
+        has_proxy = True
+
+    if "http_proxy" in command_option:
+        http_proxy = command_option["http_proxy"]
+        proxies["http"] = http_proxy
+        has_proxy = True
+
+    if "https_proxy" in command_option:
+        https_proxy = command_option["https_proxy"]
+        proxies["https"] = https_proxy
+        has_proxy = True
+
+    if has_proxy:
+        proxy_handler = urllib.request.ProxyHandler(proxies)
+
+    regex_proxies = {}
+    if "proxies_path" in command_option:
+        path = command_option["proxies_path"]
+        regex_proxies = fetch_proxies_file(path)
+
+    compiled_pattern_proxies = {re.compile(regex): proxies for regex, proxies in regex_proxies.items()}
+
+    source_options = {}
+    for source in sources:
+        option = {
+            "proxies": proxies,
+            "has_proxy": has_proxy,
+            "handlers": proxy_handler
+        }
+
+        for compiled_pattern, proxies in compiled_pattern_proxies.items():
+            result = compiled_pattern.search(source)
+            if result is not None:
+                p = (proxies if isinstance(proxies, dict) else {
+                    "http": proxies,
+                    "https": proxies
+                })
+
+                option["proxies"] = p
+                option["has_proxy"] = True
+                option["proxy_regex"] = compiled_pattern.pattern
+                option["handlers"] = urllib.request.ProxyHandler(p)
+
+        source_options[source] = option
+
+    return source_options
+
+
+def fetch_feeds(source_options):
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(feedparser.parse, source): source for source in sources}
+        futures = {executor.submit(feedparser.parse, source, handlers=option["handlers"]): source for source, option in source_options.items()}
         feeds = {future.result(): futures[future] for future in concurrent.futures.as_completed(futures)}
         return feeds
 
@@ -204,22 +279,28 @@ def execute_queries(text, queries):
             "regex_matches": regex_matches
         })
 
-    return query_results
-    # return query_results, number_of_keyword_matches
+    return query_results, number_of_keyword_matches, number_of_regex_matches
 
 
 def search_entries(feed, queries, matches):
+    total_keyword_matches = 0
+    total_regex_matches = 0
+
     entries = feed.entries
     for entry in entries:
         title = entry.title
 
-        query_results = execute_queries(title, queries)
+        query_results, number_of_keyword_matches, number_of_regex_matches = execute_queries(title, queries)
+        total_keyword_matches += number_of_keyword_matches
+        total_regex_matches += number_of_regex_matches
         for query_result in query_results:
             keyword_matches = query_result["keyword_matches"]
             regex_matches = query_result["regex_matches"]
             if len(keyword_matches) > 0 or len(regex_matches) > 0:
                 q = query_result["q"]
                 matches[q].append(entry)
+
+    return total_keyword_matches, total_regex_matches
 
 
 get_publish_date = attrgetter("published_parsed")
@@ -268,19 +349,40 @@ def process_matches(queries, matches):
     return title_entries
 
 
-def get_title_entries(feeds, queries):
+def get_title_entries(source_options, feeds, queries):
     matches = [[] for i in range(len(queries))]
 
     for feed, source in feeds.items():
-        pywikibot.output(f"Parsing feed from source \"{source}\"...", newline=False)
+        pywikibot.output(f"Parsing feed from source \"{source}\"...")
+
+        source_option = source_options[source]
+        has_proxy = source_option["has_proxy"]
+        if has_proxy:
+            proxies = source_option["proxies"]
+            proxy_source = "command line"
+            if "proxy_regex" in source_option:
+                proxy_regex = source_option["proxy_regex"]
+                proxy_source = f"matched regex pattern \"{proxy_regex}\""
+            pywikibot.output(f"Using proxies \"{proxies}\" from {proxy_source}...")
 
         if "bozo_exception" in feed:
-            pywikibot.output("")
+            if "status" in feed:
+                status = feed["status"]
+                href = feed["href"]
+                pywikibot.error(f"Received HTTP status code {status} for \"{href}\".")
+
             pywikibot.exception(feed["bozo_exception"])
         else:
-            search_entries(feed, queries, matches)
-            pywikibot.output(" Done.")
+            total_keyword_matches, total_regex_matches = search_entries(feed, queries, matches)
 
+            pywikibot.output("Found {0} {1} and {2} {3}.".format(
+                total_keyword_matches,
+                "keyword match" + ("es" if total_keyword_matches != 1 else ""),
+                total_regex_matches,
+                "regex match" + ("es" if total_regex_matches != 1 else ""),
+            ))
+
+        pywikibot.output("Done.")
         pywikibot.output("")
 
     title_entries = process_matches(queries, matches)
@@ -504,14 +606,6 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
         :param kwargs:
         """
 
-        self.availableOptions.update({
-            "config_type": kwargs["config_type"],
-            "config_path": kwargs["config_path"],
-            "config_page_title": kwargs["config_page_title"],
-
-            "group": kwargs["group"]
-        })
-
         super().__init__(site=site, generator=generator, **kwargs)
 
         self.title_entries = title_entries
@@ -534,7 +628,8 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
 
 
 def main(*args):
-    option = deepcopy(COMMAND_OPTION)
+    command_option = deepcopy(COMMAND_OPTION)
+    bot_option = {}
 
     local_args = pywikibot.handle_args(args)
     generator_factory = pagegenerators.GeneratorFactory()
@@ -544,40 +639,53 @@ def main(*args):
         stripped_value = value.strip()
         if key == "-config-type":
             config_type = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter config type:").strip())
-            option["config_type"] = ConfigType(config_type.lower())
+            command_option["config_type"] = ConfigType(config_type.lower())
         elif key == "-config-path":
             config_path = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter config file path:").strip())
-            option["config_path"] = config_path
+            command_option["config_path"] = config_path
         elif key == "-config-page-title":
             config_page_title = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter config page title:").strip())
-            option["config_page_title"] = config_page_title
+            command_option["config_page_title"] = config_page_title
         elif key == "-group":
             group = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter group:").strip())
-            option["group"] = int(group)
+            command_option["group"] = int(group)
+        elif key == "-proxy":
+            proxy = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter proxy:").strip())
+            command_option["proxy"] = proxy
+        elif key == "-http-proxy":
+            http_proxy = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter HTTP proxy:").strip())
+            command_option["http_proxy"] = http_proxy
+        elif key == "-https-proxy":
+            https_proxy = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter HTTPS proxy:").strip())
+            command_option["https_proxy"] = https_proxy
+        elif key == "-proxies-path":
+            proxies_path = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter proxies file path:").strip())
+            command_option["proxies_path"] = proxies_path
         else:
             generator_factory.handleArg(arg)
 
-    config = fetch_config(option)
+    config = fetch_config(command_option)
     sources = config["sources"]
     queries = config["queries"]
 
-    feeds = fetch_feeds(sources)
+    source_options = get_source_options(command_option, sources)
+    feeds = fetch_feeds(source_options)
 
-    title_entries = get_title_entries(feeds, queries)
+    title_entries = get_title_entries(source_options, feeds, queries)
     page_entries = {}
 
     site = pywikibot.Site()
     generator = generator_factory.getCombinedGenerator(
         pagegenerators.PreloadingGenerator(
             PageEntryGenerator(site=site, title_entries=title_entries, page_entries=page_entries),
-            groupsize=option["group"]
+            groupsize=command_option["group"]
         )
     )
     if generator is None:
         pywikibot.bot.suggest_help(missing_generator=True)
         return
 
-    bot = FeedExternalLinksBot(site, generator, title_entries, page_entries, **option)
+    bot = FeedExternalLinksBot(site, generator, title_entries, page_entries, **bot_option)
     bot.run()
 
 
