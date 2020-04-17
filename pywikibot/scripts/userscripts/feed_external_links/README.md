@@ -220,7 +220,7 @@ The advantage of using the proxies file over the command-line arguments is that 
         "http": "http://10.0.0.118/",
         "https": "https://10.0.0.118/"
     },
-    "^https?://(www\\.)?domain.tld/": {
+    "^https?://(www\\.)?domain\\.tld/": {
         "http": "http://domain.tld:8888/"
     }
 }

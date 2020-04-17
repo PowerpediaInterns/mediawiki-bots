@@ -23,7 +23,7 @@ file's MIME type or extension.
 
 SCRIPT OPTIONS
 ==============
-(Script arguments available for this bot)
+(Arguments available for this script)
 
 -total:n          Maximum number of pages to retrieve in total.
 

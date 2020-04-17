@@ -6,7 +6,7 @@ file's MIME type or extension.
 
 SCRIPT OPTIONS
 ==============
-(Script arguments available for this bot)
+(Arguments available for this script)
 
 -total:n          Maximum number of pages to retrieve in total.
 
@@ -556,11 +556,6 @@ class FileCategorizerBot(SingleSiteBot, ExistingPageBot, NoRedirectPageBot):
         :param kwargs:
         """
 
-        self.availableOptions.update({
-            "total": kwargs["total"],
-            "group": kwargs["group"]
-        })
-
         super().__init__(site=site, generator=generator, **kwargs)
 
         self.status = {
@@ -626,7 +621,8 @@ def remove_categories():
 
 
 def main(*args):
-    option = deepcopy(COMMAND_OPTION)
+    command_option = deepcopy(COMMAND_OPTION)
+    bot_option = {}
 
     local_args = pywikibot.handle_args(args)
     generator_factory = pagegenerators.GeneratorFactory()
@@ -636,25 +632,25 @@ def main(*args):
         stripped_value = value.strip()
         if key == "-total":
             total = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter total:").strip())
-            option["total"] = int(total)
+            command_option["total"] = int(total)
         elif key == "-group":
             group = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter group:").strip())
-            option["group"] = int(group)
+            command_option["group"] = int(group)
         else:
             generator_factory.handleArg(arg)
 
     site = pywikibot.Site()
     generator = generator_factory.getCombinedGenerator(
         pagegenerators.PreloadingGenerator(
-            pagegenerators.UnCategorizedImageGenerator(site=site, total=option["total"]),
-            groupsize=option["group"]
+            pagegenerators.UnCategorizedImageGenerator(site=site, total=command_option["total"]),
+            groupsize=command_option["group"]
         )
     )
     if generator is None:
         pywikibot.bot.suggest_help(missing_generator=True)
         return
 
-    bot = FileCategorizerBot(site, generator, **option)
+    bot = FileCategorizerBot(site, generator, **bot_option)
     bot.run()
 
     # remove_categories()
