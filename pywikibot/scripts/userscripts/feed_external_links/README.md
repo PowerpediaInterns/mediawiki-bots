@@ -4,7 +4,7 @@ This Pywikibot script searches a list of web feeds, finds entries matched by key
 
 ## Requirements
 
-* [Python 3+](https://www.python.org/downloads/)
+* [Python 3.8+](https://www.python.org/downloads/)
 * [Pywikibot 3+](https://www.mediawiki.org/wiki/Manual:Pywikibot/Installation#Install_Pywikibot)
 
 ## Installation
