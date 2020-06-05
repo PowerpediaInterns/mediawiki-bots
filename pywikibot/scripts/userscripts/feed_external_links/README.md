@@ -210,6 +210,41 @@ Keywords are matched case insensitively surrounded by word boundaries. This mean
 
 If case sensitivity and/or word boundaries are desired, a regex can be used instead. For example, "Washington" will match "Washington", "non-Washington", and "Washington's" but not "washington".
 
+### Multiple configs
+
+Multiple configs can be added to the same file. The format is a list of config objects.
+
+#### Example
+
+```json
+[
+    {
+        "sources": [
+            "http://domain.tld/rss1.xml"
+        ],
+        "queries": [
+            {
+                "pages": ["Test", "Nuclear", "Nuke"],
+                "keywords": ["Nuclear"],
+                "regexes": []
+            }
+        ]
+    },
+    {
+        "sources": [
+            "http://domain.tld/rss2.xml"
+        ],
+        "queries": [
+            {
+                "pages": ["Test", "STEM", "Science, Technology, Engineering, Mathematics"],
+                "keywords": ["STEM"],
+                "regexes": []
+            }
+        ]
+    }
+]
+```
+
 ## Proxies file
 
 The script may use an additional file, named "proxies.json" by default, stored in the JSON format. The file path must be supplied using the command-line argument `-proxies-path:x`.
