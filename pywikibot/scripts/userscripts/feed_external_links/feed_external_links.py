@@ -23,6 +23,11 @@ SCRIPT OPTIONS
 -config-page-title:x    Page title of the config file on the wiki. Used with
                         `-config-type:wiki` argument.
 
+-history-path:x         File path of the history file.
+
+-max-add:n              How many times a unique link is added to a page.
+                        An argument for `-history-path` must be specified.
+
 -group:n                How many pages to preload at once.
 
 -proxy:x                Specify the same proxy as both HTTP and HTTPS for
@@ -58,7 +63,7 @@ from concurrent.futures import ThreadPoolExecutor
 from operator import attrgetter
 from enum import Enum
 from copy import deepcopy
-from typing import Any, Optional, Union, TypedDict, Pattern, Match, List, Dict, Tuple, Set, Iterator, Generator
+from typing import Any, Optional, Union, TypedDict, Pattern, Match, List, Dict, Tuple, Set, Iterable, Iterator, Generator
 from urllib.request import ProxyHandler
 
 import feedparser
@@ -91,6 +96,10 @@ class ConfigTypedDict(TypedDict):
     queries: List[ConfigQueryTypedDict]
 
 
+ConfigsDataType = List[ConfigTypedDict]
+ConfigResultDataType = Union[ConfigTypedDict, ConfigsDataType]
+
+
 class ConfigType(Enum):
     FILE: str = "file"
     WIKI: str = "wiki"
@@ -103,6 +112,8 @@ class CommandOptionTypedDict(TypedDict, total=False):
     config_type: ConfigType
     config_path: str
     config_page_title: str
+    history_path: str
+    max_add: int
 
     group: int
 
@@ -127,14 +138,25 @@ ProxiesValueDataType = Union[str, Dict[str, str]]
 ProxiesDataType = Dict[str, ProxiesValueDataType]
 
 
-class SourceOptionTypedDict(TypedDict, total=False):
+class SourceOptionValueTypedDict(TypedDict, total=False):
     proxies: Dict[str, str]
     has_proxy: bool
     proxy_regex: str
     handlers: Optional[Union[ProxyHandler, List[Any]]]
 
 
-SourceOptionsDataType = Dict[str, SourceOptionTypedDict]
+SourceOptionDataType = Dict[str, SourceOptionValueTypedDict]
+
+
+class SourceConfigValueTypedDict(TypedDict):
+    option: SourceOptionValueTypedDict
+    feed: FeedParserDict
+    queries: List[ConfigQueryTypedDict]
+
+
+SourceConfigDataType = Dict[str, SourceConfigValueTypedDict]
+LinkHistoryDataType = Dict[str, int]
+HistoryDataType = Dict[str, LinkHistoryDataType]
 EntriesDataType = List[FeedParserDict]
 MatchesDataType = List[EntriesDataType]
 TitleEntriesDataType = Dict[str, EntriesDataType]
@@ -149,6 +171,8 @@ COMMAND_OPTION: CommandOptionTypedDict = {
     "config_path": f"./{CONFIG_FILENAME}",
     "config_page_title": CONFIG_PAGE_TITLE,
 
+    "max_add": 1,
+
     "group": 50
 }
 
@@ -159,7 +183,11 @@ def fetch_json_file(path: str) -> Any:
         return data
 
 
-def fetch_config_file(path: str) -> ConfigTypedDict:
+def fetch_config_file(path: str) -> ConfigResultDataType:
+    return fetch_json_file(path)
+
+
+def fetch_history_file(path: str) -> HistoryDataType:
     return fetch_json_file(path)
 
 
@@ -167,7 +195,16 @@ def fetch_proxies_file(path: str) -> ProxiesDataType:
     return fetch_json_file(path)
 
 
-def fetch_config_wiki_page(title: str) -> ConfigTypedDict:
+def write_json_file(path: str, data: Any) -> None:
+    with open(path, "w", encoding="utf8") as file:
+        json.dump(data, file, indent=4)
+
+
+def write_history_file(path: str, history: HistoryDataType) -> None:
+    write_json_file(path, history)
+
+
+def fetch_config_wiki_page(title: str) -> ConfigResultDataType:
     site = pywikibot.Site()
     page = pywikibot.Page(site, title)
 
@@ -181,11 +218,12 @@ def fetch_config_wiki_page(title: str) -> ConfigTypedDict:
         return config
     except json.decoder.JSONDecodeError as exception:
         pywikibot.error("Invalid JSON syntax:")
-        pywikibot.error(page_text)
+        pywikibot.output(page_text)
+        pywikibot.output("")
         raise exception
 
 
-def fetch_config(command_option: CommandOptionTypedDict) -> ConfigTypedDict:
+def fetch_config(command_option: CommandOptionTypedDict) -> ConfigResultDataType:
     config_type: ConfigType = command_option["config_type"]
     if config_type == ConfigType.WIKI:
         config_page_title: str = command_option["config_page_title"]
@@ -200,7 +238,22 @@ def fetch_config(command_option: CommandOptionTypedDict) -> ConfigTypedDict:
     return fetch_config_file(config_path)
 
 
-def get_source_options(command_option: CommandOptionTypedDict, sources: List[str]) -> SourceOptionsDataType:
+def parse_config(command_option: CommandOptionTypedDict) -> Tuple[ConfigsDataType, Set[str]]:
+    configs: ConfigResultDataType = fetch_config(command_option)
+    if isinstance(configs, dict):
+        configs = [configs]
+    elif not isinstance(configs, list):
+        raise TypeError("`configs` must be a dict or list.")
+
+    unique_sources: Set[str] = set()
+    for config in configs:
+        sources = config["sources"]
+        unique_sources.update(sources)
+
+    return configs, unique_sources
+
+
+def get_source_options(command_option: CommandOptionTypedDict, sources: Iterable[str]) -> SourceOptionDataType:
     # Create proxy handlers.
     proxy_handler: Optional[ProxyHandler] = None
     proxies: Dict[str, str] = {}
@@ -231,9 +284,9 @@ def get_source_options(command_option: CommandOptionTypedDict, sources: List[str
 
     compiled_pattern_proxies: Dict[Pattern, ProxiesValueDataType] = {re.compile(regex): proxies_value for regex, proxies_value in regex_proxies.items()}
 
-    source_options: SourceOptionsDataType = {}
+    source_option: SourceOptionDataType = {}
     for source in sources:
-        option: SourceOptionTypedDict = {
+        option: SourceOptionValueTypedDict = {
             "proxies": proxies,
             "has_proxy": has_proxy,
             "handlers": proxy_handler
@@ -252,16 +305,45 @@ def get_source_options(command_option: CommandOptionTypedDict, sources: List[str
                 option["proxy_regex"] = compiled_pattern.pattern
                 option["handlers"] = ProxyHandler(p)
 
-        source_options[source] = option
+        source_option[source] = option
 
-    return source_options
+    return source_option
 
 
-def fetch_feeds(source_options: SourceOptionsDataType) -> Dict[FeedParserDict, str]:
+def fetch_feeds(source_option: SourceOptionDataType) -> Dict[str, FeedParserDict]:
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(feedparser.parse, source, handlers=option["handlers"]): source for source, option in source_options.items()}
-        feeds = {future.result(): futures[future] for future in concurrent.futures.as_completed(futures)}
+        futures = {executor.submit(feedparser.parse, source, handlers=option["handlers"]): source for source, option in source_option.items()}
+        feeds = {futures[future]: future.result() for future in concurrent.futures.as_completed(futures)}
         return feeds
+
+
+def get_source_queries(configs: ConfigsDataType) -> Dict[str, List[ConfigQueryTypedDict]]:
+    source_queries: Dict[str, List[ConfigQueryTypedDict]] = {}
+
+    for config in configs:
+        sources = config["sources"]
+        queries = config["queries"]
+        for source in sources:
+            source_queries[source] = queries
+
+    return source_queries
+
+
+def get_source_config(command_option: CommandOptionTypedDict) -> SourceConfigDataType:
+    configs, unique_sources = parse_config(command_option)
+    source_option = get_source_options(command_option, unique_sources)
+    source_feed = fetch_feeds(source_option)
+    source_queries = get_source_queries(configs)
+
+    source_config: SourceConfigDataType = {}
+    for source in unique_sources:
+        source_config[source] = {
+            "option": source_option[source],
+            "feed": source_feed[source],
+            "queries": source_queries[source]
+        }
+
+    return source_config
 
 
 keyword_compiled_pattern: Dict[str, Pattern] = {}
@@ -373,7 +455,12 @@ def search_entries(feed: FeedParserDict, queries: List[ConfigQueryTypedDict], ma
 get_publish_date = attrgetter("published_parsed")
 
 
-def process_matches(queries: List[ConfigQueryTypedDict], matches: MatchesDataType) -> TitleEntriesDataType:
+def process_matches(
+    queries: List[ConfigQueryTypedDict],
+    matches: MatchesDataType,
+    history: HistoryDataType,
+    max_add: int = 1
+) -> TitleEntriesDataType:
     title_entries: TitleEntriesDataType = {}
 
     # Add all matches to a page title in `title_entries`.
@@ -391,12 +478,27 @@ def process_matches(queries: List[ConfigQueryTypedDict], matches: MatchesDataTyp
         # Sort entries by date.
         entries.sort(key=get_publish_date)
 
+        # History.
+        link_history: LinkHistoryDataType = (history[title] if title in history else {})
+
         # Remove duplicates.
         unique_entries: EntriesDataType = []
         unique_titles: Set[str] = set()
         unique_links: Set[str] = set()
         for entry in entries:
             entry_link: str = entry.link
+            if entry_link in link_history:
+                number_of_times_added: int = link_history[entry_link]
+                if number_of_times_added >= max_add:
+                    pywikibot.warning("An entry for page \"{0}\" was discarded because its link \"{1}\" was added {2} {3} before.".format(
+                        title,
+                        entry_link,
+                        number_of_times_added,
+                        "time" + ("s" if number_of_times_added != 1 else "")
+                    ))
+                    pywikibot.output("")
+                    continue
+
             if entry_link in unique_links:
                 pywikibot.warning(f"An entry for page \"{title}\" was discarded because its link \"{entry_link}\" was a duplicate.")
                 pywikibot.output("")
@@ -416,19 +518,26 @@ def process_matches(queries: List[ConfigQueryTypedDict], matches: MatchesDataTyp
     return title_entries
 
 
-def get_title_entries(source_options: SourceOptionsDataType, feeds: Dict[FeedParserDict, str], queries: List[ConfigQueryTypedDict]) -> TitleEntriesDataType:
-    matches: MatchesDataType = [[] for i in range(len(queries))]
+def get_title_entries(
+    source_config: SourceConfigDataType,
+    history: HistoryDataType,
+    max_add: int = 1
+) -> TitleEntriesDataType:
+    title_entries: TitleEntriesDataType = {}
 
-    for feed, source in feeds.items():
+    for source, config in source_config.items():
         pywikibot.output(f"Parsing feed from source \"{source}\"...")
 
-        source_option: SourceOptionTypedDict = source_options[source]
-        has_proxy = source_option["has_proxy"]
+        option: SourceOptionValueTypedDict = config["option"]
+        feed: FeedParserDict = config["feed"]
+        queries: List[ConfigQueryTypedDict] = config["queries"]
+
+        has_proxy: bool = option["has_proxy"]
         if has_proxy:
-            proxies = source_option["proxies"]
+            proxies = option["proxies"]
             proxy_source = "command line"
-            if "proxy_regex" in source_option:
-                proxy_regex = source_option["proxy_regex"]
+            if "proxy_regex" in option:
+                proxy_regex = option["proxy_regex"]
                 proxy_source = f"matched regex pattern \"{proxy_regex}\""
             pywikibot.output(f"Using proxies \"{proxies}\" from {proxy_source}...")
 
@@ -440,7 +549,14 @@ def get_title_entries(source_options: SourceOptionsDataType, feeds: Dict[FeedPar
 
             pywikibot.exception(feed["bozo_exception"])
         else:
+            matches: MatchesDataType = [[] for i in range(len(queries))]
             total_keyword_matches, total_regex_matches = search_entries(feed, queries, matches)
+            te: TitleEntriesDataType = process_matches(queries, matches, history, max_add)
+            for title, entries in te.items():
+                if title not in title_entries:
+                    title_entries[title] = []
+
+                title_entries[title].extend(entries)
 
             pywikibot.output("Found {0} {1} and {2} {3}.".format(
                 total_keyword_matches,
@@ -452,7 +568,9 @@ def get_title_entries(source_options: SourceOptionsDataType, feeds: Dict[FeedPar
         pywikibot.output("Done.")
         pywikibot.output("")
 
-    title_entries: TitleEntriesDataType = process_matches(queries, matches)
+    # Remove duplicates.
+    for title, entries in title_entries.items():
+        title_entries[title] = get_unique_entries(title, [], entries)
 
     return title_entries
 
@@ -560,7 +678,9 @@ def feed_external_links(page_title: str, page_text: str, entries: EntriesDataTyp
             log_external_links_added(number_of_unique_entries, page_title, text)
     else:
         heading = "\n\n== External links =="
-        content = "\n" + format_entries_to_list_markup(entries) + "\n\n"
+        previous_external_links = []
+        unique_entries = get_unique_entries(page_title, previous_external_links, entries)
+        content = "\n" + format_entries_to_list_markup(unique_entries) + "\n\n"
         text = heading + content
 
         lines = wikicode.filter_text(recursive=False)
@@ -570,7 +690,7 @@ def feed_external_links(page_title: str, page_text: str, entries: EntriesDataTyp
         else:
             wikicode.append(text)
 
-        number_of_unique_entries = len(entries)
+        number_of_unique_entries = len(unique_entries)
         number_of_external_links_added += number_of_unique_entries
         log_external_links_added(number_of_unique_entries, page_title, content)
 
@@ -643,6 +763,19 @@ def save_external_links(page: pywikibot.page.Page, title: str, entries: EntriesD
     pywikibot.output("")
 
 
+def update_history(history: HistoryDataType, title: str, entries: EntriesDataType) -> None:
+    link_history: Optional[LinkHistoryDataType] = None
+    if title not in history:
+        link_history = {entry.link: 1 for entry in entries}
+        history[title] = link_history
+    else:
+        link_history = history[title]
+        for entry in entries:
+            entry_link: str = entry.link
+            number_of_times_added: int = (link_history[entry_link] if entry_link in link_history else 0)
+            link_history[entry_link] = (number_of_times_added + 1)
+
+
 def PageEntryGenerator(
     site: Optional[pywikibot.site.APISite] = None,
     title_entries: Optional[TitleEntriesDataType] = None,
@@ -673,6 +806,7 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
         generator: PageEntryGeneratorDataType,
         title_entries: TitleEntriesDataType,
         page_entries: PageEntriesDataType,
+        history: HistoryDataType,
         **kwargs: BotOptionTypedDict
     ) -> None:
         """
@@ -681,6 +815,7 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
         :param generator: The page generator that determines on which pages to work.
         :param title_entries: The `title_entries`.
         :param page_entries: The `page_entries`.
+        :param history: The `history`.
         :param kwargs:
         """
 
@@ -688,6 +823,7 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
 
         self.title_entries = title_entries
         self.page_entries = page_entries
+        self.history = history
 
     def run(self) -> None:
         super().run()
@@ -700,6 +836,7 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
             page_entries = self.page_entries
             entries = (page_entries[page] if page in page_entries else self.title_entries[title])
             save_external_links(page, title, entries)
+            update_history(self.history, title, entries)
         except Exception as exception:
             pywikibot.exception(exception, tb=True)
             pywikibot.output("")
@@ -708,6 +845,9 @@ class FeedExternalLinksBot(SingleSiteBot, NoRedirectPageBot):
 def main(*args: Tuple[Any, ...]) -> None:
     command_option: CommandOptionTypedDict = deepcopy(COMMAND_OPTION)
     bot_option: BotOptionTypedDict = {}
+
+    history_path: str = ""
+    has_history_path: bool = False
 
     local_args = pywikibot.handle_args(args)
     generator_factory = pagegenerators.GeneratorFactory()
@@ -724,6 +864,13 @@ def main(*args: Tuple[Any, ...]) -> None:
         elif key == "-config-page-title":
             config_page_title = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter config page title:").strip())
             command_option["config_page_title"] = config_page_title
+        elif key == "-history-path":
+            history_path = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter history file path:").strip())
+            command_option["history_path"] = history_path
+            has_history_path = True
+        elif key == "-max-add":
+            max_add = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter max add:").strip())
+            command_option["max_add"] = int(max_add)
         elif key == "-group":
             group = (stripped_value if len(stripped_value) > 0 else pywikibot.input("Enter group:").strip())
             command_option["group"] = int(group)
@@ -742,14 +889,11 @@ def main(*args: Tuple[Any, ...]) -> None:
         else:
             generator_factory.handleArg(arg)
 
-    config = fetch_config(command_option)
-    sources = config["sources"]
-    queries = config["queries"]
+    source_config: SourceConfigDataType = get_source_config(command_option)
 
-    source_options = get_source_options(command_option, sources)
-    feeds = fetch_feeds(source_options)
+    history: HistoryDataType = (fetch_history_file(history_path) if has_history_path else {})
 
-    title_entries: TitleEntriesDataType = get_title_entries(source_options, feeds, queries)
+    title_entries: TitleEntriesDataType = get_title_entries(source_config, history, command_option["max_add"])
     page_entries: PageEntriesDataType = {}
 
     site = pywikibot.Site()
@@ -763,8 +907,12 @@ def main(*args: Tuple[Any, ...]) -> None:
         pywikibot.bot.suggest_help(missing_generator=True)
         return
 
-    bot = FeedExternalLinksBot(site, generator, title_entries, page_entries, **bot_option)  # type: ignore
+    bot = FeedExternalLinksBot(site, generator, title_entries, page_entries, history, **bot_option)  # type: ignore
     bot.run()
+
+    is_simulation: bool = pywikibot.config.simulate
+    if has_history_path and not is_simulation:
+        write_history_file(history_path, history)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+{
+    "Test": {
+        "http://domain.tld/pages/1": 1,
+        "http://domain.tld/pages/2": 5
+    }
+}

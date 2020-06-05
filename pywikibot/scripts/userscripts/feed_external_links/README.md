@@ -42,6 +42,11 @@ SCRIPT OPTIONS
 -config-page-title:x    Page title of the config file on the wiki. Used with
                         `-config-type:wiki` argument.
 
+-history-path:x         File path of the history file.
+
+-max-add:n              How many times a unique link is added to a page.
+                        An argument for `-history-path` must be specified.
+
 -group:n                How many pages to preload at once.
 
 -proxy:x                Specify the same proxy as both HTTP and HTTPS for
@@ -231,3 +236,23 @@ The key is a regex pattern. The value can be either a proxy string or an object 
 In the first key-value pair, the regex pattern ".*" matches all sources and specifies a "http://localhost:8888/" proxy for all of them.
 
 In the second key-value pair, the regex pattern "^https?://localhost/" matches all sources starting with "http://localhost/" or "https://localhost/" and specifies a "http://localhost:8888/" proxy for all of them.
+
+## History file
+
+The script may use an additional file, named "history.json" by default, stored in the JSON format. The file path must be supplied using the command-line argument `-history-path:x`.
+
+The history file stores the number of times a link has been added to a page. It is used to keep track of the links already added from previous runs. If a link has already been added to a page before, the script will not add it again.
+
+When the command-line argument `-history-path:x` is supplied, the history file is written automatically after the bot exits. 
+
+### Example
+```json
+{
+    "Test": {
+        "http://domain.tld/pages/1": 1,
+        "http://domain.tld/pages/2": 5
+    }
+}
+```
+
+The first link "http://domain.tld/pages/1" has already been added to the page "Test" once. The second link "http://domain.tld/pages/2" has been added to the page "Test" 5 times.
